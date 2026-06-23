@@ -1,4 +1,4 @@
-FROM rust:1.95.0-trixie
+FROM rust:1.96.0-trixie
 
 RUN addgroup --system lintergroup && adduser --system --ingroup lintergroup --no-create-home linteruser \
     && mkdir /linter_workdir && chown -R linteruser:lintergroup /linter_workdir
