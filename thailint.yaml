@@ -1,0 +1,35 @@
+# thailint configuration for the Articola Tools Rust linter.
+#
+# This file is baked into the Docker image at /thailint.yaml and passed to
+# every thailint invocation via --config.  It enables all three Rust-specific
+# linters (blocking-async, clone-abuse, unwrap-abuse) with strict settings so
+# that any violation fails the lint run.
+
+blocking-async:
+    enabled: true
+    # Detect blocking file I/O (std::fs::*) inside async functions.
+    detect_fs_in_async: true
+    # Detect blocking sleep (std::thread::sleep) inside async functions.
+    detect_sleep_in_async: true
+    # Detect blocking networking (std::net::*) inside async functions.
+    detect_net_in_async: true
+    # Allow blocking calls inside #[test] / #[cfg(test)] code.
+    allow_in_tests: true
+
+clone-abuse:
+    enabled: true
+    # Detect .clone() inside for/while/loop bodies.
+    detect_clone_in_loop: true
+    # Detect chained .clone().clone() calls.
+    detect_clone_chain: true
+    # Detect .clone() where the original value is never used afterward.
+    detect_unnecessary_clone: true
+    # Allow .clone() inside #[test] / #[cfg(test)] code.
+    allow_in_tests: true
+
+unwrap-abuse:
+    enabled: true
+    # Flag .expect("message") as well as .unwrap().
+    allow_expect: false
+    # Allow .unwrap()/.expect() inside #[test] / #[cfg(test)] code.
+    allow_in_tests: true

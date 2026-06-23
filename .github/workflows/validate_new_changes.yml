@@ -1,0 +1,195 @@
+name: "New changes validation"
+
+on:
+    pull_request:  # yamllint disable-line rule:empty-values
+
+permissions:
+    contents: "read"
+    packages: "read"
+
+env:
+    REGISTRY: "ghcr.io"
+    IMAGE_NAME: "articola-tools/rust-linter"
+
+jobs:
+    find-changed-files:
+        runs-on: "ubuntu-latest"
+        outputs:
+            is_yaml_changed: "${{ steps.filter.outputs.yaml }}"
+            is_dockerfile_changed: "${{ steps.filter.outputs.dockerfile }}"
+            is_rust_linter_image_changed: "${{ steps.filter.outputs.rust-linter-image }}"
+            is_markdown_changed: "${{ steps.filter.outputs.markdown }}"
+            changed_or_added_files: "${{ steps.filter.outputs.changed-or-added-files }}"
+            changed_or_added_files_list: "${{ steps.filter.outputs.changed-or-added-files_files }}"
+        permissions:
+            pull-requests: "read"
+        steps:
+            - name: "Checkout ${{ github.event.repository.name }}"
+              uses: "actions/checkout@v7"
+              with:
+                  fetch-depth: 1
+
+            - name: "Find changed files"
+              uses: "dorny/paths-filter@v4"
+              id: "filter"
+              with:
+                  list-files: "shell"
+
+                  filters: |
+                      yaml:
+                      - "**/*.yaml"
+                      - "**/*.yml"
+                      dockerfile:
+                      - "**/Dockerfile"
+                      rust-linter-image:
+                      - "**/Dockerfile"
+                      - "**/.dockerignore"
+                      markdown:
+                      - "**/*.md"
+                      changed-or-added-files:
+                      - added|modified: '**'
+
+    validate-rust-linter-image:
+        runs-on: "ubuntu-latest"
+        needs: "find-changed-files"
+        if: "${{ needs.find-changed-files.outputs.is_rust_linter_image_changed == 'true' }}"
+
+        # NOTE: building and running Docker image of Rust linter take a while because
+        # the base `rust` image is large and Rust compilation is slow. If this job
+        # takes more than 30 minutes, it means that something is wrong.
+        timeout-minutes: 30
+        steps:
+            - name: "Checkout ${{ github.event.repository.name }}"
+              uses: "actions/checkout@v7"
+
+            - name: "Set up Docker Buildx"
+              uses: "docker/setup-buildx-action@v4"
+
+            - name: "Login to Docker registry"
+              uses: "docker/login-action@v4"
+              with:
+                  registry: "${{ env.REGISTRY }}"
+                  username: "${{ github.actor }}"
+                  password: "${{ secrets.GITHUB_TOKEN }}"
+
+            - name: "Build Rust linter Docker image"
+              uses: "docker/build-push-action@v7"
+              with:
+                  # NOTE: setup of `context` is needed to force builder to use the `.dockerignore` file.
+                  context: "."
+                  push: false
+                  load: true
+
+                  # NOTE: using another name to don't allow docker to download image from the internet in the next step.
+                  tags: "local/rust-linter-pr:latest"
+                  cache-from: "type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+                  cache-to: "type=inline"
+
+            - name: "Test correctly formatted Rust"
+              run: "docker run --rm -v ${{ github.workspace }}/tests/correct_rust:/linter_workdir
+                    local/rust-linter-pr:latest"
+
+            - name: "Test incorrectly formatted Rust"
+              run: "docker run --rm -v ${{ github.workspace }}/tests/incorrect_rust:/linter_workdir
+                    local/rust-linter-pr:latest && { echo 'Incorrectly formatted Rust test must fail!' >&2; exit 1; }
+                    || exit 0"
+
+            - name: "Test thailint violations (clippy passes, thailint fails)"
+              run: "docker run --rm -v ${{ github.workspace }}/tests/incorrect_thailint:/linter_workdir
+                    local/rust-linter-pr:latest && { echo 'thailint violation test must fail!' >&2; exit 1; }
+                    || exit 0"
+
+            - name: "Run Dockerfile security scanner"
+              run: "docker run --rm --group-add $(getent group docker | cut -d: -f3)
+                    -v /var/run/docker.sock:/var/run/docker.sock
+                    ghcr.io/articola-tools/dockerfile-security-scanner local/rust-linter-pr:latest"
+
+    validate-dockerfile-changes:
+        runs-on: "ubuntu-latest"
+        needs: "find-changed-files"
+        if: "${{ needs.find-changed-files.outputs.is_dockerfile_changed == 'true' }}"
+
+        # NOTE: validating Dockerfile changes takes around 1 minute.
+        # If this job takes more than 5 minutes, it means that something is wrong.
+        timeout-minutes: 5
+        steps:
+            - name: "Checkout ${{ github.event.repository.name }}"
+              uses: "actions/checkout@v7"
+
+            - name: "Login to Docker registry"
+              uses: "docker/login-action@v4"
+              with:
+                  registry: "${{ env.REGISTRY }}"
+                  username: "${{ github.actor }}"
+                  password: "${{ secrets.GITHUB_TOKEN }}"
+
+            - name: "Run Dockerfile linter"
+              run: "docker run --rm -v ${{ github.workspace }}:/linter_workdir/repo
+                    ${{ env.REGISTRY }}/articola-tools/dockerfile-linter:latest"
+
+    validate-yaml-changes:
+        runs-on: "ubuntu-latest"
+        needs: "find-changed-files"
+        if: "${{ needs.find-changed-files.outputs.is_yaml_changed == 'true' }}"
+
+        # NOTE: validating YAML changes takes around 1 minute.
+        # If this job takes more than 5 minutes, it means that something is wrong.
+        timeout-minutes: 5
+        steps:
+            - name: "Checkout ${{ github.event.repository.name }}"
+              uses: "actions/checkout@v7"
+
+            - name: "Login to Docker registry"
+              uses: "docker/login-action@v4"
+              with:
+                  registry: "${{ env.REGISTRY }}"
+                  username: "${{ github.actor }}"
+                  password: "${{ secrets.GITHUB_TOKEN }}"
+
+            - name: "Run YAML linter"
+              run: "docker run --rm -v ${{ github.workspace }}:/linter_workdir/repo
+                    ${{ env.REGISTRY }}/articola-tools/yaml-linter:latest"
+
+    validate-markdown-changes:
+        runs-on: "ubuntu-latest"
+        needs: "find-changed-files"
+        if: "${{ needs.find-changed-files.outputs.is_markdown_changed == 'true' }}"
+
+        # NOTE: validating Markdown changes takes around 1 minute.
+        # If this job takes more than 5 minutes, it means that something is wrong.
+        timeout-minutes: 5
+        steps:
+            - name: "Checkout ${{ github.event.repository.name }}"
+              uses: "actions/checkout@v7"
+
+            - name: "Login to Docker registry"
+              uses: "docker/login-action@v4"
+              with:
+                  registry: "${{ env.REGISTRY }}"
+                  username: "${{ github.actor }}"
+                  password: "${{ secrets.GITHUB_TOKEN }}"
+
+            - name: "Run Markdown linter"
+              run: "docker run --rm -v ${{ github.workspace }}:/linter_workdir/repo
+                    ${{ env.REGISTRY }}/articola-tools/markdown-linter:latest"
+
+    validate-file-paths:
+        runs-on: "ubuntu-latest"
+        needs: "find-changed-files"
+        if: "${{ needs.find-changed-files.outputs.changed_or_added_files == 'true' }}"
+
+        # NOTE: validating file paths takes around 1 minute.
+        # If this job takes more than 5 minutes, it means that something is wrong.
+        timeout-minutes: 5
+        steps:
+            - name: "Validate file paths"
+              run: |
+                  for path in ${{ needs.find-changed-files.outputs.changed_or_added_files_list }}; do
+
+                  # NOTE: ignore `.idea` folder because it's generated. Ignore files with special names.
+
+                  if [[ "$path" != .idea* && "$path" != *Dockerfile && "$path" != *README.md && "$path" != *LICENSE ]]; then
+                  docker run --rm ${{ env.REGISTRY }}/articola-tools/file-path-validator \
+                  --naming-convention snake_case --path-to-validate "$path";
+                  fi
+                  done

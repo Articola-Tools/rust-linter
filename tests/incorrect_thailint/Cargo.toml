@@ -1,0 +1,10 @@
+[package]
+name = "incorrect_thailint"
+version = "0.1.0"
+edition = "2021"
+description = "Test fixture that passes clippy but fails thailint linters."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Articola-Tools/rust-linter"
+readme = "README.md"
+keywords = ["test", "thailint", "linter"]
+categories = ["development-tools"]
