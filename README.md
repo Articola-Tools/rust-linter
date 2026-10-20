@@ -40,6 +40,10 @@ All three linters allow violations inside `#[test]` functions and `#[cfg(test)]`
 (`allow_in_tests: true`). The thailint configuration is baked into the Docker image at
 `/thailint.yaml` (see [`thailint.yaml`](thailint.yaml) in this repository).
 
+The linters scan the whole project directory, so Rust code in workspace members outside
+`src/` (for example `crates/`) is checked as well. Build artifacts under `target/` are
+removed before thailint runs, so generated Rust files are not linted.
+
 The linter fails if any single rule is not satisfied.
 
 ## Usage
@@ -53,5 +57,6 @@ Example command to use this linter -
 `docker run --rm -v ./:/linter_workdir ghcr.io/articola-tools/rust-linter`
 
 The command above runs `cargo clippy --all-targets` on the mounted Rust project, followed by
-the three thailint linters on the `src/` directory. It exits with a non-zero status code if
-any Clippy lint, Rust warning, or thailint rule is violated.
+the three thailint linters on the whole project directory (including workspace members such
+as `crates/`). It exits with a non-zero status code if any Clippy lint, Rust warning, or
+thailint rule is violated.

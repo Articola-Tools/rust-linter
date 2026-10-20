@@ -29,8 +29,14 @@ cargo clippy --all-targets -- \
 # /thailint.yaml.  thailint is installed in an isolated virtual environment at
 # /opt/thailint to avoid conflicts with Debian-managed Python packages.
 #
+# The whole project is scanned (not just src/) so that workspace members in
+# sibling directories such as crates/ are linted too, matching the scope of
+# `cargo clippy --all-targets`.  Clippy's build artifacts are removed first so
+# thailint does not lint generated Rust files under target/.
+#
 # thailint exits with code 1 when violations are found, so the script (running
 # under `set -e`) will fail immediately if any thailint linter reports issues.
-/opt/thailint/bin/thailint blocking-async --config /thailint.yaml "$WORKDIR/src/"
-/opt/thailint/bin/thailint clone-abuse --config /thailint.yaml "$WORKDIR/src/"
-/opt/thailint/bin/thailint unwrap-abuse --config /thailint.yaml "$WORKDIR/src/"
+rm -rf "$WORKDIR/target"
+/opt/thailint/bin/thailint blocking-async --config /thailint.yaml "$WORKDIR"
+/opt/thailint/bin/thailint clone-abuse --config /thailint.yaml "$WORKDIR"
+/opt/thailint/bin/thailint unwrap-abuse --config /thailint.yaml "$WORKDIR"
