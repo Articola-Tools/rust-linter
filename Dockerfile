@@ -21,8 +21,8 @@ RUN rustup component add clippy
 # All packages are version-pinned to satisfy hadolint DL3008.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        imagemagick=8:7.1.1.43+dfsg1-1+deb13u10 \
-        linux-libc-dev=6.12.94-1 \
+        imagemagick=8:7.1.1.43+dfsg1-1+deb13u12 \
+        linux-libc-dev=6.12.113-1 \
         python3-venv=3.13.5-1 \
     && python3 -m venv /opt/thailint \
     && /opt/thailint/bin/pip install --upgrade pip \
